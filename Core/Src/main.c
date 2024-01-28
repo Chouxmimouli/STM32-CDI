@@ -337,7 +337,7 @@ int main(void)
 			else {
 				  while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time); // Wait for the calculated delay
 				  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
-				  while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time + 100); // Keep pin high for 25μ seconds
+				  while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time + 25); // Keep pin high for 25μ seconds
 				  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
 			}
 

@@ -120,26 +120,24 @@ void Set_LED (int LEDnum, int Red, int Green, int Blue)
 // Set brightness for LEDs
 /////////////////////////////////////////////
 
-#define PI 3.14159265
-
-void Set_Brightness (int brightness)  // 0-45
+void Set_Brightness (float brightness)
 {
 #if USE_BRIGHTNESS
+    float GammaBrightness = pow(brightness, 2.2);
+    //printf("%.2f", GammaBrightness);
 
-	if (brightness > 45) brightness = 45;
-	for (int i=0; i<MAX_LED; i++)
-	{
-		LED_Mod[i][0] = LED_Data[i][0];
-		for (int j=1; j<4; j++)
-		{
-			float angle = 90-brightness;  // in degrees
-			angle = angle*PI / 180;  // in rad
-			LED_Mod[i][j] = (LED_Data[i][j])/(tan(angle));
-		}
-	}
+    if (GammaBrightness > 1) GammaBrightness = 1;
+    if (GammaBrightness < 0) GammaBrightness = 0;
 
+    for (int i=0; i<MAX_LED; i++)
+    {
+        LED_Mod[i][0] = LED_Data[i][0];
+        for (int j=1; j<4; j++)
+        {
+            LED_Mod[i][j] = (LED_Data[i][j])*GammaBrightness;
+        }
+    }
 #endif
-
 }
 
 /////////////////////////////////////////////
@@ -249,24 +247,24 @@ int main(void)
  	for (int i = 0; i < 11; i++) {
  	    // Turn on the current LED with the predefined color
  	    Set_LED(i, colors[i][0], colors[i][1], colors[i][2]);
- 	    Set_Brightness(10);
+ 	    Set_Brightness(0.25);
  	    WS2812_Send();
  	    HAL_Delay(100);
  	}
 
  	HAL_Delay(500);
 
- 	for (int i = 10; i >= 0; i--) {
+ 	for (int i = 0.25; i >= 0; i-=0.01) {
  		Set_Brightness(i);
  		WS2812_Send();
- 		HAL_Delay(50);
+ 		HAL_Delay(20);
  	}
 
  	////////////////////////////////////////////
  	//RPM and led Colors Calulations
  	////////////////////////////////////////////
 
- 	Set_Brightness(10);
+ 	Set_Brightness(0.25);
 
 	#define MAX_RPM 5000 // (9000-4000)
 
@@ -345,7 +343,7 @@ int main(void)
 			LED_Update++;
 			if (LED_Update >= 5) {
 				  Update_LEDs();
-				  Set_Brightness(10);
+				  Set_Brightness(0.25);
 				  WS2812_Send();
 				  LED_Update = 0;
 			}

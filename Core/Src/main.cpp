@@ -111,7 +111,7 @@ private:
 	bool datasentflag = false;
 
 private:
-	void SetBrightness (float *brightness)
+	void SetBrightness (const float *brightness)
 	{
 		float GammaBrightness = pow(*brightness, 2.2);
 
@@ -134,7 +134,7 @@ public:
 		datasentflag = true;
 	}
 
-	void SetColor (int LEDnum, int Red, int Green, int Blue)
+	void SetColor (const uint8_t LEDnum, const uint8_t Red, const uint8_t Green, const uint8_t Blue)
 	{
 		LED_Data[LEDnum][0] = LEDnum;
 		LED_Data[LEDnum][1] = Green;
@@ -145,11 +145,11 @@ public:
 	// Convert and send the data to DMA
 	uint16_t pwmData[(24*MAX_LED)+50];
 
-	void Send (float brightness)
+	void Send (const float brightness)
 	{
 		SetBrightness(&brightness);
 
-		uint32_t color, index=0;
+		uint32_t color, index = 0;
 
 		for (int i= 0; i<MAX_LED; i++)
 		{
@@ -183,7 +183,7 @@ public:
     void Update() {
 		#define MAX_RPM 5000 // (9000-4000)
 
-    	int num_on = round(((rpm - 4000.0) * MAX_LED) / MAX_RPM); // RPM-4000 because MAX_RPM=9000-3000
+    	uint16_t num_on = round(((rpm - 4000.0) * MAX_LED) / MAX_RPM); // RPM-4000 because MAX_RPM=9000-3000
 
     	if (num_on < 0 || num_on > 11) {
     		num_on = 0;
@@ -305,16 +305,16 @@ int main()
 			rpm = 60000000 / pulse_interval;
 
 			// Round the rpm value
-			map_index = round(rpm / 250.0);
+			map_index = round(rpm / 250.0f);
 
 			// Cap the value of map_index to 16 because thats the last value in the ignition table above >RPM_4000<
 			if (map_index > 16) {
 				  map_index = 16;
 			}
 
-			// Calculate the delay, not in μs, needed to ignite at the specified advence angle in ignition_map
+			// Calculate the delay, in μs, needed to ignite at the specified advence angle in ignition_map
 			angle_difference = trigger_coil_angle - ignition_map[map_index];
-			delay_time = pulse_interval / 360 * angle_difference;
+			delay_time = (pulse_interval / 360.0f) * angle_difference;
 
 			//////// Rev limiter and ignition ////////
 			// Check if RPM exceeds the rev_limiter threshold

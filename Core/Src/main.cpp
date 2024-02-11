@@ -64,7 +64,7 @@ static void MX_TIM2_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-#define rev_limiter 9500 // Rpm value
+#define rev_limit 9500 // Rpm value
 #define ignition_cut_time 10000 // μs
 #define trigger_coil_angle 25
 #define RPM_0    15 // This curve is linear from 1000 RPM to 4000.
@@ -85,58 +85,33 @@ static void MX_TIM2_Init(void);
 #define RPM_3750 24
 #define RPM_4000 25 // After this point, the curve becomes flat
 
-uint8_t ignition_map[17] = {
-		RPM_0,
-		RPM_250,
-		RPM_500,
-		RPM_750,
-		RPM_1000,
-		RPM_1250,
-		RPM_1500,
-		RPM_1750,
-		RPM_2000,
-		RPM_2250,
-		RPM_2500,
-		RPM_2750,
-		RPM_3000,
-		RPM_3250,
-		RPM_3500,
-		RPM_3750,
-		RPM_4000
-};
-
-uint8_t map_index, angle_difference, LED_Update = 0;
+// Global variables
 uint16_t rpm = 0;
-uint32_t delay_time, pulse_interval;
-_Bool fresh_cycle = 1;
-
-// LED Colors
 uint8_t colors[11][3] = {
-		{255, 0, 0},   // LED 0
-	 	{255, 0, 0},   // LED 1
-	 	{223, 145, 0}, // LED 2
-	 	{223, 145, 0}, // LED 3
-	 	{186, 196, 0}, // LED 4
-	 	{255, 255, 0}, // LED 5
-	 	{167, 215, 0}, // LED 6
-	 	{80, 241, 0},  // LED 7
-	 	{80, 241, 0},  // LED 8
-	 	{0, 255, 0},   // LED 9
-	 	{0, 255, 0}    // LED 10
+	 {255, 0, 0},   // LED 0
+	 {255, 0, 0},   // LED 1
+	 {223, 145, 0}, // LED 2
+	 {223, 145, 0}, // LED 3
+	 {186, 196, 0}, // LED 4
+	 {255, 255, 0}, // LED 5
+	 {167, 215, 0}, // LED 6
+	 {80, 241, 0},  // LED 7
+	 {80, 241, 0},  // LED 8
+	 {0, 255, 0},   // LED 9
+	 {0, 255, 0}    // LED 10
 };
 
-class Led{
-public:
+class Led {
+private:
+	// Storing the LED data
 	#define MAX_LED 11
 	#define USE_BRIGHTNESS 1
-
 	uint8_t LED_Data[MAX_LED][4]; // without brightness
 	uint8_t LED_Mod[MAX_LED][4];  // with brightness
 
-	// Storing the LED data
-
 	bool datasentflag = false;
 
+public:
 	void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
 		HAL_TIM_PWM_Stop_DMA(&htim4, TIM_CHANNEL_2);
 		datasentflag = true;
@@ -149,8 +124,6 @@ public:
 		LED_Data[LEDnum][2] = Red;
 		LED_Data[LEDnum][3] = Blue;
 	}
-
-	// Set brightness
 
 	void SetBrightness (float brightness)
 	{
@@ -172,15 +145,11 @@ public:
 	}
 
 	// Convert and send the data to DMA
-
 	uint16_t pwmData[(24*MAX_LED)+50];
-	uint16_t effStep = 0;
 
 	void Send ()
 	{
-		uint32_t indx=0;
-		uint32_t color;
-
+		uint32_t color, index=0;
 
 		for (int i= 0; i<MAX_LED; i++)
 		{
@@ -194,29 +163,28 @@ public:
 			{
 				if (color&(1<<i))
 				{
-					pwmData[indx] = 71;  // 105*0.68
+					pwmData[index] = 71;  // 105*0.68
 				}
 
-				else pwmData[indx] = 34;  // 105-71
+				else pwmData[index] = 34;  // 105-71
 
-				indx++;
+				index++;
 			}
 
 		}
 
 		for (int i=0; i<50; i++)
 		{
-			pwmData[indx] = 0;
-			indx++;
+			pwmData[index] = 0;
+			index++;
 		}
 
-		HAL_TIM_PWM_Start_DMA(&htim4, TIM_CHANNEL_2, (uint32_t *)pwmData, indx);
+		HAL_TIM_PWM_Start_DMA(&htim4, TIM_CHANNEL_2, (uint32_t *)pwmData, index);
 		while (!datasentflag){};
 		datasentflag = 0;
 	}
 
 	// Update Leds (Rpm calculations)
-
     void Update() {
 		#define MAX_RPM 5000 // (9000-4000)
 
@@ -240,6 +208,7 @@ public:
 
 };
 
+
 /* USER CODE END 0 */
 
 /**
@@ -250,7 +219,8 @@ int main()
 {
   /* USER CODE BEGIN 1 */
 
-  struct Led led;
+  // Create led class
+  Led led;
 
   /* USER CODE END 1 */
 
@@ -298,6 +268,30 @@ int main()
 
   HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_SET);
 
+  // While loop variables
+  uint8_t ignition_map[17] = {
+  	 RPM_0,
+  	 RPM_250,
+  	 RPM_500,
+  	 RPM_750,
+  	 RPM_1000,
+  	 RPM_1250,
+  	 RPM_1500,
+  	 RPM_1750,
+  	 RPM_2000,
+  	 RPM_2250,
+  	 RPM_2500,
+  	 RPM_2750,
+  	 RPM_3000,
+  	 RPM_3250,
+  	 RPM_3500,
+  	 RPM_3750,
+  	 RPM_4000
+  };
+  uint8_t map_index, angle_difference, LED_Update = 0;
+  uint32_t delay_time, pulse_interval;
+  bool fresh_cycle = true;
+
   // Start timer
   HAL_TIM_Base_Start(&htim2);
 
@@ -333,7 +327,7 @@ int main()
 
 			//////// Rev limiter and ignition ////////
 			// Check if RPM exceeds the rev_limiter threshold
-			if (rpm > rev_limiter) {
+			if (rpm > rev_limit) {
 				  while (__HAL_TIM_GET_COUNTER(&htim2) < ignition_cut_time); // Keep ignition off for ignition_cut_time
 				  fresh_cycle = true;
 			}
@@ -355,7 +349,7 @@ int main()
 			}
 
 
-			//Safety delay
+			// Safety delay
 			while (__HAL_TIM_GET_COUNTER(&htim2) < 3000);
 		}
 

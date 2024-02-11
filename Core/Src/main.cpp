@@ -128,6 +128,14 @@ private:
 	}
 
 public:
+	Led() {
+		for (int i = 0; i < 11; ++i) {
+			for (int j = 0; j < 4; ++j) {
+				LED_Data[i][j] = 0;
+				LED_Mod[i][j] = 0;
+		    }
+		}
+	}
 
 	void SetColor (const uint8_t LEDnum, const uint8_t Red, const uint8_t Green, const uint8_t Blue)
 	{

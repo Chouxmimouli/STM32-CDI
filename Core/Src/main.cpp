@@ -100,15 +100,14 @@ uint8_t colors[11][3] = {
 	 {0, 255, 0},   // LED 9
 	 {0, 255, 0}    // LED 10
 };
+bool datasentflag = false;
 
 class Led {
 private:
 	// Storing the LED data
 	#define MAX_LED 11
 	uint8_t LED_Data[MAX_LED][4]; // before brightness correction
-	uint8_t LED_Mod[MAX_LED][4]; // after  brightness correciton
-
-	bool datasentflag = false;
+	uint8_t LED_Mod[MAX_LED][4]; // after  brightness correction
 
 private:
 	void SetBrightness (const float *brightness)
@@ -129,10 +128,6 @@ private:
 	}
 
 public:
-	void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
-		HAL_TIM_PWM_Stop_DMA(&htim4, TIM_CHANNEL_2);
-		datasentflag = true;
-	}
 
 	void SetColor (const uint8_t LEDnum, const uint8_t Red, const uint8_t Green, const uint8_t Blue)
 	{
@@ -202,6 +197,11 @@ public:
     }
 
 };
+
+void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
+	HAL_TIM_PWM_Stop_DMA(&htim4, TIM_CHANNEL_2);
+	datasentflag = true;
+}
 
 
 /* USER CODE END 0 */

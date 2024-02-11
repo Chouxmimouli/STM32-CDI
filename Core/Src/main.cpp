@@ -85,106 +85,160 @@ static void MX_TIM2_Init(void);
 #define RPM_3750 24
 #define RPM_4000 25 // After this point, the curve becomes flat
 
-uint8_t ignition_map[17] = { RPM_0, RPM_250, RPM_500, RPM_750, RPM_1000, RPM_1250, RPM_1500, RPM_1750, RPM_2000, RPM_2250, RPM_2500, RPM_2750, RPM_3000, RPM_3250, RPM_3500, RPM_3750, RPM_4000 };
-uint8_t map_index, angle_difference, LED_Update = 0, LED = 0;
+uint8_t ignition_map[17] = {
+		RPM_0,
+		RPM_250,
+		RPM_500,
+		RPM_750,
+		RPM_1000,
+		RPM_1250,
+		RPM_1500,
+		RPM_1750,
+		RPM_2000,
+		RPM_2250,
+		RPM_2500,
+		RPM_2750,
+		RPM_3000,
+		RPM_3250,
+		RPM_3500,
+		RPM_3750,
+		RPM_4000
+};
+
+uint8_t map_index, angle_difference, LED_Update = 0;
 uint16_t rpm = 0;
 uint32_t delay_time, pulse_interval;
 _Bool fresh_cycle = 1;
 
-#define MAX_LED 11
-#define USE_BRIGHTNESS 1
+// LED Colors
+uint8_t colors[11][3] = {
+		{255, 0, 0},   // LED 0
+	 	{255, 0, 0},   // LED 1
+	 	{223, 145, 0}, // LED 2
+	 	{223, 145, 0}, // LED 3
+	 	{186, 196, 0}, // LED 4
+	 	{255, 255, 0}, // LED 5
+	 	{167, 215, 0}, // LED 6
+	 	{80, 241, 0},  // LED 7
+	 	{80, 241, 0},  // LED 8
+	 	{0, 255, 0},   // LED 9
+	 	{0, 255, 0}    // LED 10
+};
 
-uint8_t LED_Data[MAX_LED][4];
-uint8_t LED_Mod[MAX_LED][4];  // for brightness
+class Led{
+public:
+	#define MAX_LED 11
+	#define USE_BRIGHTNESS 1
 
-/////////////////////////////////////////////
-//Storing the LED data
-/////////////////////////////////////////////
+	uint8_t LED_Data[MAX_LED][4]; // without brightness
+	uint8_t LED_Mod[MAX_LED][4];  // with brightness
 
-int datasentflag=0;
+	// Storing the LED data
 
-void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
-	HAL_TIM_PWM_Stop_DMA(&htim4, TIM_CHANNEL_2);
-	datasentflag=1;
-}
+	bool datasentflag = false;
 
-void Set_LED (int LEDnum, int Red, int Green, int Blue)
-{
-	LED_Data[LEDnum][0] = LEDnum;
-	LED_Data[LEDnum][1] = Green;
-	LED_Data[LEDnum][2] = Red;
-	LED_Data[LEDnum][3] = Blue;
-}
+	void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
+		HAL_TIM_PWM_Stop_DMA(&htim4, TIM_CHANNEL_2);
+		datasentflag = true;
+	}
 
-/////////////////////////////////////////////
-// Set brightness for LEDs
-/////////////////////////////////////////////
-
-void Set_Brightness (float brightness)
-{
-#if USE_BRIGHTNESS
-    float GammaBrightness = pow(brightness, 2.2);
-    //printf("%.2f", GammaBrightness);
-
-    if (GammaBrightness > 1) GammaBrightness = 1;
-    if (GammaBrightness < 0) GammaBrightness = 0;
-
-    for (int i=0; i<MAX_LED; i++)
-    {
-        LED_Mod[i][0] = LED_Data[i][0];
-        for (int j=1; j<4; j++)
-        {
-            LED_Mod[i][j] = (LED_Data[i][j])*GammaBrightness;
-        }
-    }
-#endif
-}
-
-/////////////////////////////////////////////
-//Convert and send the data to DMA
-/////////////////////////////////////////////
-
-uint16_t pwmData[(24*MAX_LED)+50];
-uint16_t effStep = 0;
-
-void WS2812_Send (void)
-{
-	uint32_t indx=0;
-	uint32_t color;
-
-
-	for (int i= 0; i<MAX_LED; i++)
+	void SetColor (int LEDnum, int Red, int Green, int Blue)
 	{
-#if USE_BRIGHTNESS
-		color = ((LED_Mod[i][1]<<16) | (LED_Mod[i][2]<<8) | (LED_Mod[i][3]));
-#else
-		color = ((LED_Data[i][1]<<16) | (LED_Data[i][2]<<8) | (LED_Data[i][3]));
-#endif
+		LED_Data[LEDnum][0] = LEDnum;
+		LED_Data[LEDnum][1] = Green;
+		LED_Data[LEDnum][2] = Red;
+		LED_Data[LEDnum][3] = Blue;
+	}
 
-		for (int i=23; i>=0; i--)
+	// Set brightness
+
+	void SetBrightness (float brightness)
+	{
+	#if USE_BRIGHTNESS
+	    float GammaBrightness = pow(brightness, 2.2);
+
+	    if (GammaBrightness > 1) GammaBrightness = 1;
+	    if (GammaBrightness < 0) GammaBrightness = 0;
+
+	    for (int i=0; i<MAX_LED; i++)
+	    {
+	        LED_Mod[i][0] = LED_Data[i][0];
+	        for (int j=1; j<4; j++)
+	        {
+	            LED_Mod[i][j] = (LED_Data[i][j])*GammaBrightness;
+	        }
+	    }
+	#endif
+	}
+
+	// Convert and send the data to DMA
+
+	uint16_t pwmData[(24*MAX_LED)+50];
+	uint16_t effStep = 0;
+
+	void Send ()
+	{
+		uint32_t indx=0;
+		uint32_t color;
+
+
+		for (int i= 0; i<MAX_LED; i++)
 		{
-			if (color&(1<<i))
+	#if USE_BRIGHTNESS
+			color = ((LED_Mod[i][1]<<16) | (LED_Mod[i][2]<<8) | (LED_Mod[i][3]));
+	#else
+			color = ((LED_Data[i][1]<<16) | (LED_Data[i][2]<<8) | (LED_Data[i][3]));
+	#endif
+
+			for (int i=23; i>=0; i--)
 			{
-				pwmData[indx] = 71;  // 105*0.68
+				if (color&(1<<i))
+				{
+					pwmData[indx] = 71;  // 105*0.68
+				}
+
+				else pwmData[indx] = 34;  // 105-71
+
+				indx++;
 			}
 
-			else pwmData[indx] = 34;  // 105-71
+		}
 
+		for (int i=0; i<50; i++)
+		{
+			pwmData[indx] = 0;
 			indx++;
 		}
 
+		HAL_TIM_PWM_Start_DMA(&htim4, TIM_CHANNEL_2, (uint32_t *)pwmData, indx);
+		while (!datasentflag){};
+		datasentflag = 0;
 	}
 
-	for (int i=0; i<50; i++)
-	{
-		pwmData[indx] = 0;
-		indx++;
-	}
+	// Update Leds (Rpm calculations)
 
-	HAL_TIM_PWM_Start_DMA(&htim4, TIM_CHANNEL_2, (uint32_t *)pwmData, indx);
-	while (!datasentflag){};
-	datasentflag = 0;
-}
+    void Update() {
+		#define MAX_RPM 5000 // (9000-4000)
+
+    	int num_on = round(((rpm - 4000.0) * MAX_LED) / MAX_RPM); // RPM-4000 because MAX_RPM=9000-3000
+
+    	if (num_on < 0 || num_on > 11) {
+    		num_on = 0;
+    	}
+ 		// Loop through the LEDs from 0 to 10
+ 		for (int i = 0; i < 11; i++) {
+ 			// If the LED index is less than the input, turn it on with the predefined color
+ 			if (i < num_on) {
+ 				SetColor(i, colors[i][0], colors[i][1], colors[i][2]);
+ 			}
+ 			// Otherwise, turn it off by setting the color to 0
+ 			else {
+ 				SetColor(i, 0, 0, 0);
+ 			}
+ 		}
+    }
+
+};
 
 /* USER CODE END 0 */
 
@@ -192,9 +246,11 @@ void WS2812_Send (void)
   * @brief  The application entry point.
   * @retval int
   */
-int main(void)
+int main()
 {
   /* USER CODE BEGIN 1 */
+
+  struct Led led;
 
   /* USER CODE END 1 */
 
@@ -221,79 +277,29 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
-    ///////////////////////////////////////////
-    //LED Colors
-    ///////////////////////////////////////////
+  // LEDs startup animation
+  HAL_Delay(100);
+  for (int i = 0; i < 11; i++) {         // Loop through the LEDs from 0 to 10
+ 	  led.SetColor(i, colors[i][0], colors[i][1], colors[i][2]);
+ 	  led.SetBrightness(0.3);
+ 	  led.Send();
+ 	  HAL_Delay(100);
+  }
 
-    int colors[11][3] = {
-    	{255, 0, 0}, // LED 0
- 	    {255, 0, 0}, // LED 1
- 	    {223, 145, 0}, // LED 2
- 	    {223, 145, 0}, // LED 3
- 	    {186, 196, 0}, // LED 4
- 	    {255, 255, 0}, // LED 5
- 	    {167, 215, 0}, // LED 6
- 	    {80, 241, 0}, // LED 7
- 	    {80, 241, 0}, // LED 8
- 	    {0, 255, 0}, // LED 9
- 	    {0, 255, 0} // LED 10
- 	};
+  HAL_Delay(500);
 
- 	///////////////////////////////////////////
- 	//LEDs startup animation
- 	///////////////////////////////////////////
+  for (float i = 0.3; i >= 0; i-=0.005) {
+	  led.SetBrightness(i);
+ 	  led.Send();
+ 	  HAL_Delay(15);
+  }
 
- 	// Loop through the LEDs from 0 to 10
- 	for (int i = 0; i < 11; i++) {
- 	    // Turn on the current LED with the predefined color
- 	    Set_LED(i, colors[i][0], colors[i][1], colors[i][2]);
- 	    Set_Brightness(0.25);
- 	    WS2812_Send();
- 	    HAL_Delay(100);
- 	}
+  led.SetBrightness(0.3);
 
- 	HAL_Delay(500);
+  HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_SET);
 
- 	for (int i = 0.25; i >= 0; i-=0.01) {
- 		Set_Brightness(i);
- 		WS2812_Send();
- 		HAL_Delay(20);
- 	}
-
- 	////////////////////////////////////////////
- 	//RPM and led Colors Calulations
- 	////////////////////////////////////////////
-
- 	Set_Brightness(0.25);
-
-	#define MAX_RPM 5000 // (9000-4000)
-
-    // Declare an array of 16-bit integers to store the LED states
-
-    void Update_LEDs() {
-
-    	int num_on = round(((rpm - 4000.0) * MAX_LED) / MAX_RPM); // RPM-4000 because MAX_RPM=9000-3000
-
-    	if (num_on < 0 || num_on > 11) {
-    		num_on = 0;
-    	}
- 		// Loop through the LEDs from 0 to 10
- 		for (int i = 0; i < 11; i++) {
- 			// If the LED index is less than the input, turn it on with the predefined color
- 			if (i < num_on) {
- 				Set_LED(i, colors[i][0], colors[i][1], colors[i][2]);
- 			}
- 			// Otherwise, turn it off by setting the color to 0
- 			else {
- 				Set_LED(i, 0, 0, 0);
- 			}
- 		}
-    }
-
-    HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_SET);
-
-    // Start timer
-    HAL_TIM_Base_Start(&htim2);
+  // Start timer
+  HAL_TIM_Base_Start(&htim2);
 
   /* USER CODE END 2 */
 
@@ -342,9 +348,9 @@ int main(void)
 
 			LED_Update++;
 			if (LED_Update >= 5) {
-				  Update_LEDs();
-				  Set_Brightness(0.25);
-				  WS2812_Send();
+				  led.Update();
+				  led.SetBrightness(0.25);
+				  led.Send();
 				  LED_Update = 0;
 			}
 
@@ -354,7 +360,7 @@ int main(void)
 		}
 
 		else {
-			fresh_cycle = 0;
+			fresh_cycle = false;
 			while (__HAL_TIM_GET_COUNTER(&htim2) < 3000);
 		}
 	 }

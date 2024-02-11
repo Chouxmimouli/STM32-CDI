@@ -105,11 +105,28 @@ class Led {
 private:
 	// Storing the LED data
 	#define MAX_LED 11
-	#define USE_BRIGHTNESS 1
-	uint8_t LED_Data[MAX_LED][4]; // without brightness
-	uint8_t LED_Mod[MAX_LED][4];  // with brightness
+	uint8_t LED_Data[MAX_LED][4]; // before brightness correction
+	uint8_t LED_Mod[MAX_LED][4]; // after  brightness correciton
 
 	bool datasentflag = false;
+
+private:
+	void SetBrightness (float *brightness)
+	{
+		float GammaBrightness = pow(*brightness, 2.2);
+
+		if (GammaBrightness > 1) GammaBrightness = 1;
+		if (GammaBrightness < 0) GammaBrightness = 0;
+
+		for (int i=0; i<MAX_LED; i++)
+		{
+			LED_Mod[i][0] = LED_Data[i][0];
+			for (int j=1; j<4; j++)
+			{
+				LED_Mod[i][j] = (LED_Data[i][j])*GammaBrightness;
+			}
+		}
+	}
 
 public:
 	void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
@@ -125,40 +142,18 @@ public:
 		LED_Data[LEDnum][3] = Blue;
 	}
 
-	void SetBrightness (float brightness)
-	{
-	#if USE_BRIGHTNESS
-	    float GammaBrightness = pow(brightness, 2.2);
-
-	    if (GammaBrightness > 1) GammaBrightness = 1;
-	    if (GammaBrightness < 0) GammaBrightness = 0;
-
-	    for (int i=0; i<MAX_LED; i++)
-	    {
-	        LED_Mod[i][0] = LED_Data[i][0];
-	        for (int j=1; j<4; j++)
-	        {
-	            LED_Mod[i][j] = (LED_Data[i][j])*GammaBrightness;
-	        }
-	    }
-	#endif
-	}
-
 	// Convert and send the data to DMA
 	uint16_t pwmData[(24*MAX_LED)+50];
 
-	void Send ()
+	void Send (float brightness)
 	{
+		SetBrightness(&brightness);
+
 		uint32_t color, index=0;
 
 		for (int i= 0; i<MAX_LED; i++)
 		{
-	#if USE_BRIGHTNESS
 			color = ((LED_Mod[i][1]<<16) | (LED_Mod[i][2]<<8) | (LED_Mod[i][3]));
-	#else
-			color = ((LED_Data[i][1]<<16) | (LED_Data[i][2]<<8) | (LED_Data[i][3]));
-	#endif
-
 			for (int i=23; i>=0; i--)
 			{
 				if (color&(1<<i))
@@ -251,20 +246,16 @@ int main()
   HAL_Delay(100);
   for (int i = 0; i < 11; i++) {         // Loop through the LEDs from 0 to 10
  	  led.SetColor(i, colors[i][0], colors[i][1], colors[i][2]);
- 	  led.SetBrightness(0.3);
- 	  led.Send();
+ 	  led.Send(0.3);
  	  HAL_Delay(100);
   }
 
   HAL_Delay(500);
 
   for (float i = 0.3; i >= 0; i-=0.005) {
-	  led.SetBrightness(i);
- 	  led.Send();
+ 	  led.Send(i);
  	  HAL_Delay(15);
   }
-
-  led.SetBrightness(0.3);
 
   HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_SET);
 
@@ -343,8 +334,7 @@ int main()
 			LED_Update++;
 			if (LED_Update >= 5) {
 				  led.Update();
-				  led.SetBrightness(0.25);
-				  led.Send();
+				  led.Send(0.3);
 				  LED_Update = 0;
 			}
 

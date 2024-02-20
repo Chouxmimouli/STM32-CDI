@@ -1,7 +1,7 @@
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
-  * @file           : main.c
+  * @file           : main.cpp
   * @brief          : Main program body
   ******************************************************************************
   * @attention
@@ -66,24 +66,24 @@ static void MX_TIM2_Init(void);
 
 #define rev_limit 9500 // Rpm value
 #define ignition_cut_time 10000 // μs
-#define trigger_coil_angle 25
-#define RPM_0    15 // This curve is linear from 1000 RPM to 4000.
-#define RPM_250  15
-#define RPM_500  15
-#define RPM_750  15
-#define RPM_1000 15
+#define trigger_coil_angle 16
+#define RPM_0    16 // This curve is linear from 1000 RPM to 4000.
+#define RPM_250  16
+#define RPM_500  16
+#define RPM_750  16
+#define RPM_1000 16
 #define RPM_1250 16
-#define RPM_1500 17
-#define RPM_1750 18
-#define RPM_2000 18
-#define RPM_2250 19
-#define RPM_2500 20
-#define RPM_2750 21
-#define RPM_3000 22
-#define RPM_3250 23
-#define RPM_3500 23
-#define RPM_3750 24
-#define RPM_4000 25 // After this point, the curve becomes flat
+#define RPM_1500 16
+#define RPM_1750 16
+#define RPM_2000 16
+#define RPM_2250 16
+#define RPM_2500 16
+#define RPM_2750 16
+#define RPM_3000 16
+#define RPM_3250 16
+#define RPM_3500 16
+#define RPM_3750 16
+#define RPM_4000 16 // After this point, the curve becomes flat
 
 // Global variables
 uint16_t rpm = 0;
@@ -100,7 +100,29 @@ uint8_t colors[11][3] = {
 	 {0, 255, 0},   // LED 9
 	 {0, 255, 0}    // LED 10
 };
+uint8_t map_index, angle_difference, LED_Update = 0;
+uint32_t delay_time, pulse_interval;
+bool fresh_cycle = true;
 bool datasentflag = false;
+uint8_t ignition_map[17] = {
+  	 RPM_0,
+  	 RPM_250,
+  	 RPM_500,
+  	 RPM_750,
+  	 RPM_1000,
+  	 RPM_1250,
+  	 RPM_1500,
+  	 RPM_1750,
+  	 RPM_2000,
+  	 RPM_2250,
+  	 RPM_2500,
+  	 RPM_2750,
+  	 RPM_3000,
+  	 RPM_3250,
+  	 RPM_3500,
+  	 RPM_3750,
+  	 RPM_4000
+  };
 
 class Led {
 private:
@@ -204,6 +226,12 @@ public:
  		}
     }
 
+    void UpdateTwoStep() {
+    	if (HAL_GPIO_ReadPin(Trigger_GPIO_Port, Trigger_Pin) == GPIO_PIN_SET) {
+    		SetColor(10, 28, 119, 255);
+    	}
+    }
+
 };
 
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
@@ -267,30 +295,6 @@ int main()
 
   HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_SET);
 
-  // While loop variables
-  uint8_t ignition_map[17] = {
-  	 RPM_0,
-  	 RPM_250,
-  	 RPM_500,
-  	 RPM_750,
-  	 RPM_1000,
-  	 RPM_1250,
-  	 RPM_1500,
-  	 RPM_1750,
-  	 RPM_2000,
-  	 RPM_2250,
-  	 RPM_2500,
-  	 RPM_2750,
-  	 RPM_3000,
-  	 RPM_3250,
-  	 RPM_3500,
-  	 RPM_3750,
-  	 RPM_4000
-  };
-  uint8_t map_index, angle_difference, LED_Update = 0;
-  uint32_t delay_time, pulse_interval;
-  bool fresh_cycle = true;
-
   // Start timer
   HAL_TIM_Base_Start(&htim2);
 
@@ -342,6 +346,7 @@ int main()
 			LED_Update++;
 			if (LED_Update >= 5) {
 				  led.Update();
+				  led.UpdateTwoStep(); // Check if 2step button is pressed
 				  led.Send(0.3);
 				  LED_Update = 0;
 			}

@@ -21,10 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stdbool.h"
-#include "math.h"
-#include "stdio.h"
-#include "string.h"
+#include <cmath>
+#include <cstdio>
+#include <string>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -86,7 +85,6 @@ static void MX_TIM2_Init(void);
 #define RPM_4000 16 // After this point, the curve becomes flat
 
 // Global variables
-uint16_t rpm = 0;
 uint8_t colors[11][3] = {
 	 {255, 0, 0},   // LED 0
 	 {255, 0, 0},   // LED 1
@@ -100,9 +98,9 @@ uint8_t colors[11][3] = {
 	 {0, 255, 0},   // LED 9
 	 {0, 255, 0}    // LED 10
 };
-uint8_t map_index, angle_difference, LED_Update = 0;
-uint32_t delay_time, pulse_interval;
-bool fresh_cycle = true;
+uint8_t map_index, angle_difference, LED_Update = 0, fresh_cycle = 2;
+uint16_t rpm = 0;
+uint32_t delay_time, pulse_interval, dwell_time = 10000;
 bool datasentflag = false;
 uint8_t ignition_map[17] = {
   	 RPM_0,
@@ -122,7 +120,7 @@ uint8_t ignition_map[17] = {
   	 RPM_3500,
   	 RPM_3750,
   	 RPM_4000
-  };
+};
 
 class Led {
 private:
@@ -132,18 +130,15 @@ private:
 	uint8_t LED_Mod[MAX_LED][4]; // after  brightness correction
 
 private:
-	void SetBrightness (const float *brightness)
-	{
-		float GammaBrightness = pow(*brightness, 2.2);
+	void SetBrightness (const float &brightness) {
+		float GammaBrightness = pow(brightness, 2.2);
 
 		if (GammaBrightness > 1) GammaBrightness = 1;
 		if (GammaBrightness < 0) GammaBrightness = 0;
 
-		for (int i=0; i<MAX_LED; i++)
-		{
+		for (int i=0; i<MAX_LED; i++) {
 			LED_Mod[i][0] = LED_Data[i][0];
-			for (int j=1; j<4; j++)
-			{
+			for (int j=1; j<4; j++) {
 				LED_Mod[i][j] = (LED_Data[i][j])*GammaBrightness;
 			}
 		}
@@ -159,8 +154,7 @@ public:
 		}
 	}
 
-	void SetColor (const uint8_t LEDnum, const uint8_t Red, const uint8_t Green, const uint8_t Blue)
-	{
+	void SetColor (const uint8_t LEDnum, const uint8_t Red, const uint8_t Green, const uint8_t Blue) {
 		LED_Data[LEDnum][0] = LEDnum;
 		LED_Data[LEDnum][1] = Green;
 		LED_Data[LEDnum][2] = Red;
@@ -168,21 +162,17 @@ public:
 	}
 
 	// Convert and send the data to DMA
-	uint16_t pwmData[(24*MAX_LED)+50];
+	uint16_t pwmData[(24 * MAX_LED) + 50];
 
-	void Send (const float brightness)
-	{
-		SetBrightness(&brightness);
+	void Send (const float brightness) {
+		SetBrightness(brightness);
 
 		uint32_t color, index = 0;
 
-		for (int i= 0; i<MAX_LED; i++)
-		{
+		for (int i= 0; i<MAX_LED; i++) {
 			color = ((LED_Mod[i][1]<<16) | (LED_Mod[i][2]<<8) | (LED_Mod[i][3]));
-			for (int i=23; i>=0; i--)
-			{
-				if (color&(1<<i))
-				{
+			for (int i=23; i>=0; i--) {
+				if (color&(1<<i)) {
 					pwmData[index] = 71;  // 105*0.68
 				}
 
@@ -193,8 +183,7 @@ public:
 
 		}
 
-		for (int i=0; i<50; i++)
-		{
+		for (int i=0; i<50; i++) {
 			pwmData[index] = 0;
 			index++;
 		}
@@ -234,11 +223,24 @@ public:
 
 };
 
-void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
+// Lerp function
+
+// PulseIntervalMin 5500.0f;
+// PulseIntervalMax 250000.0f;
+// DwellTimeMin 3000.0f;
+// DwellTimeMax 50000.0f;
+
+static float m = (50000.0f - 3000.0f) / (250000.0f - 5500.0f);
+static float b = 3000.0f - m * 5500.0f;
+
+float lerp() {
+    return pulse_interval * m + b;
+}
+
+void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim) {
 	HAL_TIM_PWM_Stop_DMA(&htim4, TIM_CHANNEL_2);
 	datasentflag = true;
 }
-
 
 /* USER CODE END 0 */
 
@@ -246,7 +248,7 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
   * @brief  The application entry point.
   * @retval int
   */
-int main()
+int main(void)
 {
   /* USER CODE BEGIN 1 */
 
@@ -280,7 +282,8 @@ int main()
 
   // LEDs startup animation
   HAL_Delay(100);
-  for (int i = 0; i < 11; i++) {         // Loop through the LEDs from 0 to 10
+  for (int i = 0; i < 11; i++)
+  {   // Loop through the LEDs from 0 to 10
  	  led.SetColor(i, colors[i][0], colors[i][1], colors[i][2]);
  	  led.Send(0.3);
  	  HAL_Delay(100);
@@ -288,7 +291,8 @@ int main()
 
   HAL_Delay(500);
 
-  for (float i = 0.3; i >= 0; i-=0.005) {
+  for (float i = 0.3; i >= 0; i-=0.005)
+  {
  	  led.Send(i);
  	  HAL_Delay(15);
   }
@@ -302,62 +306,61 @@ int main()
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1) {
-
-	 if (HAL_GPIO_ReadPin(Trigger_GPIO_Port, Trigger_Pin) == GPIO_PIN_SET) {
-
+  while (1)
+  {
+	 if (HAL_GPIO_ReadPin(Trigger_GPIO_Port, Trigger_Pin) == GPIO_PIN_SET)
+	 {
 		pulse_interval = __HAL_TIM_GET_COUNTER(&htim2);
 
-		// Reset timer
 		TIM2->CNT = 0;
 
-		if (fresh_cycle == false) {
+		if (fresh_cycle < 2) {
 
-			// Convert pulse_interval (in μs) into rpm
+			// Rpm calculations
 			rpm = 60000000 / pulse_interval;
-
-			// Round the rpm value
 			map_index = round(rpm / 250.0f);
 
-			// Cap the value of map_index to 16 because thats the last value in the ignition table above >RPM_4000<
 			if (map_index > 16) {
 				  map_index = 16;
 			}
 
-			// Calculate the delay, in μs, needed to ignite at the specified advence angle in ignition_map
 			angle_difference = trigger_coil_angle - ignition_map[map_index];
 			delay_time = (pulse_interval / 360.0f) * angle_difference;
 
-			//////// Rev limiter and ignition ////////
-			// Check if RPM exceeds the rev_limiter threshold
-			if (rpm > rev_limit) {
-				  while (__HAL_TIM_GET_COUNTER(&htim2) < ignition_cut_time); // Keep ignition off for ignition_cut_time
-				  fresh_cycle = true;
-			}
+			// Ignition
+			if (fresh_cycle == 0) {
+				if (rpm > rev_limit) {
+					  while (__HAL_TIM_GET_COUNTER(&htim2) < ignition_cut_time);
+					  fresh_cycle = 2;
+				}
 
+				else {
+					  while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time);
+					  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
+				}
+
+				LED_Update++;
+				if (LED_Update >= 5) {
+					led.Update();
+					led.UpdateTwoStep();
+					led.Send(0.3);
+					LED_Update = 0;
+				}
+			}
 			else {
-				  while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time); // Wait for the calculated delay
-				  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
-				  while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time + 25); // Keep pin high for 25μ seconds
-				  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
+				fresh_cycle = 0;
 			}
 
+			// Estimate dwell time for next cycle
+			dwell_time = lerp();
 
-			LED_Update++;
-			if (LED_Update >= 5) {
-				  led.Update();
-				  led.UpdateTwoStep(); // Check if 2step button is pressed
-				  led.Send(0.3);
-				  LED_Update = 0;
-			}
+			while (__HAL_TIM_GET_COUNTER(&htim2) < (pulse_interval - dwell_time));
+			HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
 
-
-			// Safety delay
-			while (__HAL_TIM_GET_COUNTER(&htim2) < 3000);
 		}
 
 		else {
-			fresh_cycle = false;
+			fresh_cycle = 1;
 			while (__HAL_TIM_GET_COUNTER(&htim2) < 3000);
 		}
 	 }
@@ -554,16 +557,22 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(Led_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : CamPosition_Pin TwoStep_Pin */
+  GPIO_InitStruct.Pin = CamPosition_Pin|TwoStep_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
   /*Configure GPIO pin : Trigger_Pin */
   GPIO_InitStruct.Pin = Trigger_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(Trigger_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : Ignition_Pin */
   GPIO_InitStruct.Pin = Ignition_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(Ignition_GPIO_Port, &GPIO_InitStruct);
 

@@ -300,7 +300,9 @@ int main(void)
   HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_SET);
 
   // Start timer
-  HAL_TIM_Base_Start(&htim2);
+  HAL_TIM_Base_Start_IT(&htim2);
+
+  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
 
   /* USER CODE END 2 */
 
@@ -336,7 +338,7 @@ int main(void)
 
 				else {
 					  while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time);
-					  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
+					  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
 				}
 
 				LED_Update++;
@@ -354,14 +356,18 @@ int main(void)
 			// Estimate dwell time for next cycle
 			dwell_time = lerp();
 
+			if (dwell_time > 50000) {
+				dwell_time = 50000;
+			}
+
 			while (__HAL_TIM_GET_COUNTER(&htim2) < (pulse_interval - dwell_time));
-			HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
 
 		}
 
 		else {
 			fresh_cycle = 1;
-			while (__HAL_TIM_GET_COUNTER(&htim2) < 3000);
+			while (__HAL_TIM_GET_COUNTER(&htim2) < 3500);
 		}
 	 }
   }
@@ -439,7 +445,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 100-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4294967295;
+  htim2.Init.Period = 300000 - 1;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -572,7 +578,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : Ignition_Pin */
   GPIO_InitStruct.Pin = Ignition_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(Ignition_GPIO_Port, &GPIO_InitStruct);
 
@@ -581,6 +587,20 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance == TIM2)
+  {
+	  fresh_cycle = 2;
+	  rpm = 0;
+	  pulse_interval = 0;
+	  LED_Update = 0;
+	  dwell_time = 10000;
+
+	  TIM2->CNT = 0;
+  }
+}
+
 
 /* USER CODE END 4 */
 

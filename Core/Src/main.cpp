@@ -98,10 +98,10 @@ uint8_t colors[11][3] = {
 	 {0, 255, 0},   // LED 9
 	 {0, 255, 0}    // LED 10
 };
-uint8_t map_index, angle_difference, LED_Update = 0, fresh_cycle = 2;
+uint8_t map_index, angle_difference, LED_Update = 0;
 uint16_t rpm = 0;
-uint32_t delay_time, pulse_interval, dwell_time = 10000;
-bool datasentflag = false;
+uint32_t delay_time, pulse_interval;
+bool datasentflag = false, fresh_cycle = true;
 uint8_t ignition_map[17] = {
   	 RPM_0,
   	 RPM_250,
@@ -223,20 +223,6 @@ public:
 
 };
 
-// Lerp function
-
-// PulseIntervalMin 5500.0f;
-// PulseIntervalMax 250000.0f;
-// DwellTimeMin 3000.0f;
-// DwellTimeMax 50000.0f;
-
-static float m = (50000.0f - 3000.0f) / (250000.0f - 5500.0f);
-static float b = 3000.0f - m * 5500.0f;
-
-float lerp() {
-    return pulse_interval * m + b;
-}
-
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim) {
 	HAL_TIM_PWM_Stop_DMA(&htim4, TIM_CHANNEL_2);
 	datasentflag = true;
@@ -297,11 +283,10 @@ int main(void)
  	  HAL_Delay(15);
   }
 
-  HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_SET);
-
   // Start timer
   HAL_TIM_Base_Start_IT(&htim2);
 
+  HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
 
   /* USER CODE END 2 */
@@ -316,7 +301,7 @@ int main(void)
 
 		TIM2->CNT = 0;
 
-		if (fresh_cycle < 2) {
+		if (fresh_cycle == 0) {
 
 			// Rpm calculations
 			rpm = 60000000 / pulse_interval;
@@ -330,50 +315,37 @@ int main(void)
 			delay_time = (pulse_interval / 360.0f) * angle_difference;
 
 			// Ignition
-			if (fresh_cycle == 0) {
-				if (rpm > rev_limit) {
-					  while (__HAL_TIM_GET_COUNTER(&htim2) < ignition_cut_time);
-					  fresh_cycle = 2;
-				}
-
-				else {
-					  while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time);
-					  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
-				}
-
-				LED_Update++;
-				if (LED_Update >= 5) {
-					led.Update();
-					led.UpdateTwoStep();
-					led.Send(0.3);
-					LED_Update = 0;
-				}
+			if (rpm > rev_limit) {
+				  while (__HAL_TIM_GET_COUNTER(&htim2) < ignition_cut_time);
+				  fresh_cycle = true;
 			}
 			else {
-				fresh_cycle = 0;
+				  while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time);
+				  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
 			}
 
-			// Estimate dwell time for next cycle
-			dwell_time = lerp();
-
-			if (dwell_time > 50000) {
-				dwell_time = 50000;
+			/*
+			LED_Update++;
+			if (LED_Update >= 5) {
+				led.Update();
+				led.UpdateTwoStep();
+				led.Send(0.3);
+				LED_Update = 0;
 			}
+			*/
 
-			while (__HAL_TIM_GET_COUNTER(&htim2) < (pulse_interval - dwell_time));
+			while (__HAL_TIM_GET_COUNTER(&htim2) < (pulse_interval * 0.25 ));
 			HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
-
 		}
-
 		else {
-			fresh_cycle = 1;
+			fresh_cycle = false;
 			while (__HAL_TIM_GET_COUNTER(&htim2) < 3500);
 		}
 	 }
   }
-    /* USER CODE END WHILE */
+  /* USER CODE END WHILE */
 
-    /* USER CODE BEGIN 3 */
+  /* USER CODE BEGIN 3 */
 
   /* USER CODE END 3 */
 }
@@ -578,7 +550,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : Ignition_Pin */
   GPIO_InitStruct.Pin = Ignition_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(Ignition_GPIO_Port, &GPIO_InitStruct);
 
@@ -592,10 +564,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if (htim->Instance == TIM2)
   {
 	  fresh_cycle = 2;
-	  rpm = 0;
-	  pulse_interval = 0;
 	  LED_Update = 0;
-	  dwell_time = 10000;
 
 	  TIM2->CNT = 0;
   }

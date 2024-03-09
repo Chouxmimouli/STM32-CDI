@@ -21,9 +21,10 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <cmath>
-#include <cstdio>
-#include <string>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -122,106 +123,101 @@ uint8_t ignition_map[17] = {
   	 RPM_4000
 };
 
-class Led {
-private:
-	// Storing the LED data
-	#define MAX_LED 11
-	uint8_t LED_Data[MAX_LED][4]; // before brightness correction
-	uint8_t LED_Mod[MAX_LED][4]; // after  brightness correction
+// Storing the LED data
+#define MAX_LED 11
+uint8_t LED_Data[MAX_LED][4]; // before brightness correction
+uint8_t LED_Mod[MAX_LED][4]; // after  brightness correction
 
-private:
-	void SetBrightness (const float &brightness) {
-		float GammaBrightness = pow(brightness, 2.2);
+void LedInit() {
+	for (int i = 0; i < 11; ++i) {
+		for (int j = 0; j < 4; ++j) {
+			LED_Data[i][j] = 0;
+			LED_Mod[i][j] = 0;
+	    }
+	}
+}
 
-		if (GammaBrightness > 1) GammaBrightness = 1;
-		if (GammaBrightness < 0) GammaBrightness = 0;
+void LedSetBrightness(const float *brightness) {
+	float GammaBrightness = pow(*brightness, 2.2);
 
-		for (int i=0; i<MAX_LED; i++) {
-			LED_Mod[i][0] = LED_Data[i][0];
-			for (int j=1; j<4; j++) {
-				LED_Mod[i][j] = (LED_Data[i][j])*GammaBrightness;
-			}
+	if (GammaBrightness > 1) GammaBrightness = 1;
+	if (GammaBrightness < 0) GammaBrightness = 0;
+
+	for (int i=0; i<MAX_LED; i++) {
+		LED_Mod[i][0] = LED_Data[i][0];
+		for (int j=1; j<4; j++) {
+			LED_Mod[i][j] = (LED_Data[i][j])*GammaBrightness;
 		}
 	}
+}
 
-public:
-	Led() {
-		for (int i = 0; i < 11; ++i) {
-			for (int j = 0; j < 4; ++j) {
-				LED_Data[i][j] = 0;
-				LED_Mod[i][j] = 0;
-		    }
-		}
-	}
+void LedSetColor (const uint8_t LEDnum, const uint8_t Red, const uint8_t Green, const uint8_t Blue) {
+	LED_Data[LEDnum][0] = LEDnum;
+	LED_Data[LEDnum][1] = Green;
+	LED_Data[LEDnum][2] = Red;
+	LED_Data[LEDnum][3] = Blue;
+}
 
-	void SetColor (const uint8_t LEDnum, const uint8_t Red, const uint8_t Green, const uint8_t Blue) {
-		LED_Data[LEDnum][0] = LEDnum;
-		LED_Data[LEDnum][1] = Green;
-		LED_Data[LEDnum][2] = Red;
-		LED_Data[LEDnum][3] = Blue;
-	}
+// Convert and send the data to DMA
+uint16_t pwmData[(24 * MAX_LED) + 50];
 
-	// Convert and send the data to DMA
-	uint16_t pwmData[(24 * MAX_LED) + 50];
+void LedSend (const float brightness) {
+	LedSetBrightness(&brightness);
 
-	void Send (const float brightness) {
-		SetBrightness(brightness);
+	uint32_t color, index = 0;
 
-		uint32_t color, index = 0;
-
-		for (int i= 0; i<MAX_LED; i++) {
-			color = ((LED_Mod[i][1]<<16) | (LED_Mod[i][2]<<8) | (LED_Mod[i][3]));
-			for (int i=23; i>=0; i--) {
-				if (color&(1<<i)) {
-					pwmData[index] = 71;  // 105*0.68
-				}
-
-				else pwmData[index] = 34;  // 105-71
-
-				index++;
+	for (int i= 0; i<MAX_LED; i++) {
+		color = ((LED_Mod[i][1]<<16) | (LED_Mod[i][2]<<8) | (LED_Mod[i][3]));
+		for (int i=23; i>=0; i--) {
+			if (color&(1<<i)) {
+				pwmData[index] = 71;  // 105*0.68
 			}
 
-		}
+			else pwmData[index] = 34;  // 105-71
 
-		for (int i=0; i<50; i++) {
-			pwmData[index] = 0;
 			index++;
 		}
 
-		HAL_TIM_PWM_Start_DMA(&htim4, TIM_CHANNEL_2, (uint32_t *)pwmData, index);
-		while (!datasentflag){};
-		datasentflag = 0;
 	}
 
-	// Update Leds (Rpm calculations)
-    void Update() {
-		#define MAX_RPM 5000 // (9000-4000)
+	for (int i=0; i<50; i++) {
+		pwmData[index] = 0;
+		index++;
+	}
 
-    	uint16_t num_on = round(((rpm - 4000.0) * MAX_LED) / MAX_RPM); // RPM-4000 because MAX_RPM=9000-3000
+	HAL_TIM_PWM_Start_DMA(&htim4, TIM_CHANNEL_2, (uint32_t *)pwmData, index);
+	while (!datasentflag){};
+	datasentflag = 0;
+}
 
-    	if (num_on < 0 || num_on > 11) {
-    		num_on = 0;
-    	}
- 		// Loop through the LEDs from 0 to 10
- 		for (int i = 0; i < 11; i++) {
- 			// If the LED index is less than the input, turn it on with the predefined color
- 			if (i < num_on) {
- 				SetColor(i, colors[i][0], colors[i][1], colors[i][2]);
- 			}
- 			// Otherwise, turn it off by setting the color to 0
- 			else {
- 				SetColor(i, 0, 0, 0);
- 			}
- 		}
-    }
+// Update Leds (Rpm calculations)
+void LedUpdate() {
+	#define MAX_RPM 5000 // (9000-4000)
 
-    void UpdateTwoStep() {
-    	if (HAL_GPIO_ReadPin(Trigger_GPIO_Port, Trigger_Pin) == GPIO_PIN_SET) {
-    		SetColor(10, 28, 119, 255);
-    	}
-    }
+	uint16_t num_on = round(((rpm - 4000.0) * MAX_LED) / MAX_RPM); // RPM-4000 because MAX_RPM=9000-3000
 
-};
+	if (num_on < 0 || num_on > 11) {
+		num_on = 0;
+	}
+	// Loop through the LEDs from 0 to 10
+	for (int i = 0; i < 11; i++) {
+		// If the LED index is less than the input, turn it on with the predefined color
+		if (i < num_on) {
+			LedSetColor(i, colors[i][0], colors[i][1], colors[i][2]);
+		}
+		// Otherwise, turn it off by setting the color to 0
+		else {
+			LedSetColor(i, 0, 0, 0);
+		}
+	}
+}
+
+void LedUpdateTwoStep() {
+	if (HAL_GPIO_ReadPin(Trigger_GPIO_Port, Trigger_Pin) == GPIO_PIN_SET) {
+		LedSetColor(10, 28, 119, 255);
+	}
+}
+
 
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim) {
 	HAL_TIM_PWM_Stop_DMA(&htim4, TIM_CHANNEL_2);
@@ -237,9 +233,6 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim) {
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
-  // Create led class
-  Led led;
 
   /* USER CODE END 1 */
 
@@ -266,12 +259,17 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
+  LedInit();
+
+  HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
+
   // LEDs startup animation
   HAL_Delay(100);
   for (int i = 0; i < 11; i++)
   {   // Loop through the LEDs from 0 to 10
- 	  led.SetColor(i, colors[i][0], colors[i][1], colors[i][2]);
- 	  led.Send(0.3);
+	  LedSetColor(i, colors[i][0], colors[i][1], colors[i][2]);
+	  LedSend(0.3);
  	  HAL_Delay(100);
   }
 
@@ -279,15 +277,12 @@ int main(void)
 
   for (float i = 0.3; i >= 0; i-=0.005)
   {
- 	  led.Send(i);
+	  LedSend(i);
  	  HAL_Delay(15);
   }
 
   // Start timer
   HAL_TIM_Base_Start_IT(&htim2);
-
-  HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
 
   /* USER CODE END 2 */
 
@@ -324,28 +319,30 @@ int main(void)
 				  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
 			}
 
-			/*
+
 			LED_Update++;
 			if (LED_Update >= 5) {
-				led.Update();
-				led.UpdateTwoStep();
-				led.Send(0.3);
+				LedUpdate();
+				LedUpdateTwoStep();
+				LedSend(0.3);
 				LED_Update = 0;
 			}
-			*/
+
 
 			while (__HAL_TIM_GET_COUNTER(&htim2) < (pulse_interval * 0.25 ));
 			HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
 		}
 		else {
 			fresh_cycle = false;
-			while (__HAL_TIM_GET_COUNTER(&htim2) < 3500);
+			LedSetColor(10, 0, 0, 0);
+			LedSend(0.3);
+			while (__HAL_TIM_GET_COUNTER(&htim2) < 3000);
 		}
 	 }
   }
-  /* USER CODE END WHILE */
+    /* USER CODE END WHILE */
 
-  /* USER CODE BEGIN 3 */
+    /* USER CODE BEGIN 3 */
 
   /* USER CODE END 3 */
 }
@@ -523,7 +520,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
@@ -563,10 +560,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if (htim->Instance == TIM2)
   {
-	  fresh_cycle = 2;
+	  fresh_cycle = true;
 	  LED_Update = 0;
 
 	  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
+	  LedSetColor(10, 213, 3, 255);
+	  LedSend(0.3);
 
 	  TIM2->CNT = 0;
   }

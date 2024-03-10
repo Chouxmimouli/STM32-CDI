@@ -259,10 +259,11 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
-  LedInit();
-
   HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
+
+  LedInit();
+
 
   // LEDs startup animation
   HAL_Delay(100);
@@ -283,6 +284,8 @@ int main(void)
 
   // Start timer
   HAL_TIM_Base_Start_IT(&htim2);
+
+  HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_RESET);
 
   /* USER CODE END 2 */
 

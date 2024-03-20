@@ -64,8 +64,8 @@ static void MX_TIM2_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-#define rev_limit 7000 // Rpm value
-#define ignition_cut_time 10000 // μs
+#define rev_limit 9000 // Rpm value
+#define ignition_cut_time 50000 // μs
 #define trigger_coil_angle 16
 #define RPM_0    16 // This curve is linear from 1000 RPM to 4000.
 #define RPM_250  16
@@ -313,7 +313,7 @@ int main(void)
 
 
 			// Ignition
-			if (HAL_GPIO_ReadPin(CamPosition_GPIO_Port, CamPosition_Pin) == GPIO_PIN_SET) {
+			if (HAL_GPIO_ReadPin(CamPosition_GPIO_Port, CamPosition_Pin) == GPIO_PIN_RESET) {
 
 				while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time);
 				HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
@@ -324,7 +324,6 @@ int main(void)
 				}
 			}
 			else {
-				//while (__HAL_TIM_GET_COUNTER(&htim2) < (pulse_interval * 0.25 ));
 				HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
 				/*
 				LedUpdate();

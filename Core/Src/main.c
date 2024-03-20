@@ -64,7 +64,7 @@ static void MX_TIM2_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-#define rev_limit 9500 // Rpm value
+#define rev_limit 7000 // Rpm value
 #define ignition_cut_time 10000 // μs
 #define trigger_coil_angle 16
 #define RPM_0    16 // This curve is linear from 1000 RPM to 4000.
@@ -293,13 +293,12 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	 if (HAL_GPIO_ReadPin(Trigger_GPIO_Port, Trigger_Pin) == GPIO_PIN_SET)
-	 {
+	 if (HAL_GPIO_ReadPin(Trigger_GPIO_Port, Trigger_Pin) == GPIO_PIN_SET) {
 		pulse_interval = __HAL_TIM_GET_COUNTER(&htim2);
 
 		TIM2->CNT = 0;
 
-		if (fresh_cycle == 0) {
+		if (fresh_cycle == false) {
 
 			// Rpm calculations
 			rpm = 60000000 / pulse_interval;
@@ -312,33 +311,38 @@ int main(void)
 			angle_difference = trigger_coil_angle - ignition_map[map_index];
 			delay_time = (pulse_interval / 360.0f) * angle_difference;
 
+
 			// Ignition
-			if (rpm > rev_limit) {
-				  while (__HAL_TIM_GET_COUNTER(&htim2) < ignition_cut_time);
-				  fresh_cycle = true;
+			if (HAL_GPIO_ReadPin(CamPosition_GPIO_Port, CamPosition_Pin) == GPIO_PIN_SET) {
+
+				while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time);
+				HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
+
+				if (rpm > rev_limit) {
+					while (__HAL_TIM_GET_COUNTER(&htim2) < ignition_cut_time);
+					fresh_cycle = true;
+				}
 			}
 			else {
-				  while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time);
-				  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
-			}
-
-
-			LED_Update++;
-			if (LED_Update >= 5) {
+				//while (__HAL_TIM_GET_COUNTER(&htim2) < (pulse_interval * 0.25 ));
+				HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
+				/*
 				LedUpdate();
 				LedUpdateTwoStep();
 				LedSend(0.3);
-				LED_Update = 0;
+				*/
 			}
 
+			// Safety delay
+			while (__HAL_TIM_GET_COUNTER(&htim2) < 3000);
 
-			while (__HAL_TIM_GET_COUNTER(&htim2) < (pulse_interval * 0.25 ));
-			HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
 		}
 		else {
 			fresh_cycle = false;
+			/*
 			LedSetColor(10, 0, 0, 0);
 			LedSend(0.3);
+			*/
 			while (__HAL_TIM_GET_COUNTER(&htim2) < 3000);
 		}
 	 }
@@ -567,10 +571,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	  LED_Update = 0;
 
 	  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
-	  LedSetColor(10, 213, 3, 255);
-	  LedSend(0.3);
+	  //LedSetColor(10, 213, 3, 255);
+	  //LedSend(0.3);
 
-	  TIM2->CNT = 0;
+	  //TIM2->CNT = 0;
   }
 }
 

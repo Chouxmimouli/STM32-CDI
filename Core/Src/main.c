@@ -65,7 +65,7 @@ static void MX_TIM2_Init(void);
 /* USER CODE BEGIN 0 */
 
 #define rev_limit 9000 // Rpm value
-#define ignition_cut_time 50000 // μs
+#define ignition_cut_time 60000 // μs
 #define trigger_coil_angle 16
 #define RPM_0    16 // This curve is linear from 1000 RPM to 4000.
 #define RPM_250  16
@@ -232,6 +232,7 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim) {
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -313,30 +314,34 @@ int main(void)
 
 
 			// Ignition
-			if (HAL_GPIO_ReadPin(CamPosition_GPIO_Port, CamPosition_Pin) == GPIO_PIN_RESET) {
+			if (HAL_GPIO_ReadPin(QuickShifter_GPIO_Port, QuickShifter_Pin) == GPIO_PIN_SET && HAL_GPIO_ReadPin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET)) {
 
-				while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time);
-				HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
+				if (HAL_GPIO_ReadPin(CamPosition_GPIO_Port, CamPosition_Pin) == GPIO_PIN_RESET) {
 
-				if (rpm > rev_limit) {
-					while (__HAL_TIM_GET_COUNTER(&htim2) < ignition_cut_time);
-					fresh_cycle = true;
+					while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time);
+					HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
+
+					if (rpm > rev_limit) {
+						while (__HAL_TIM_GET_COUNTER(&htim2) < ignition_cut_time);
+						fresh_cycle = true;
+					}
+				} else {
+					HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
+					/*
+					LedUpdate();
+					LedUpdateTwoStep();
+					LedSend(0.3);
+					*/
 				}
-			}
-			else {
-				HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
-				/*
-				LedUpdate();
-				LedUpdateTwoStep();
-				LedSend(0.3);
-				*/
+			} else {
+				fresh_cycle = true;
+				while (HAL_GPIO_ReadPin(QuickShifter_GPIO_Port, QuickShifter_Pin) == GPIO_PIN_RESET);
 			}
 
-			// Safety delay
-			while (__HAL_TIM_GET_COUNTER(&htim2) < 3000);
+		// Safety delay
+		while (__HAL_TIM_GET_COUNTER(&htim2) < 2000);
 
-		}
-		else {
+		} else {
 			fresh_cycle = false;
 			/*
 			LedSetColor(10, 0, 0, 0);
@@ -557,6 +562,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(Ignition_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : QuickShifter_Pin */
+  GPIO_InitStruct.Pin = QuickShifter_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(QuickShifter_GPIO_Port, &GPIO_InitStruct);
+
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
 }
@@ -566,14 +577,18 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if (htim->Instance == TIM2)
   {
-	  fresh_cycle = true;
-	  LED_Update = 0;
+	  if (HAL_GPIO_ReadPin(QuickShifter_GPIO_Port, QuickShifter_Pin) == GPIO_PIN_RESET) {
+		  TIM2->CNT = 0;
+	  } else {
+		  fresh_cycle = true;
+		  LED_Update = 0;
 
-	  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
-	  //LedSetColor(10, 213, 3, 255);
-	  //LedSend(0.3);
+		  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
+		  //LedSetColor(10, 213, 3, 255);
+		  //LedSend(0.3);
 
-	  //TIM2->CNT = 0;
+		  //TIM2->CNT = 0;
+	  }
   }
 }
 

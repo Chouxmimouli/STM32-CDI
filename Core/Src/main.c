@@ -303,7 +303,7 @@ int main(void)
 
 			// Rpm calculations
 			rpm = 60000000 / pulse_interval;
-			map_index = round(rpm / 250.0f);
+			map_index = round(rpm / 250.0f); //
 
 			if (map_index > 16) {
 				  map_index = 16;

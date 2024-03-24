@@ -314,7 +314,7 @@ int main(void)
 
 
 			// Ignition
-			if (HAL_GPIO_ReadPin(QuickShifter_GPIO_Port, QuickShifter_Pin) == GPIO_PIN_SET && HAL_GPIO_ReadPin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET)) {
+			if (HAL_GPIO_ReadPin(QuickShifter_GPIO_Port, QuickShifter_Pin) == GPIO_PIN_SET && HAL_GPIO_ReadPin(Ignition_GPIO_Port, Ignition_Pin) == GPIO_PIN_RESET) {
 
 				if (HAL_GPIO_ReadPin(CamPosition_GPIO_Port, CamPosition_Pin) == GPIO_PIN_RESET) {
 

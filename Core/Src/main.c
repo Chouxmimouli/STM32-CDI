@@ -314,7 +314,7 @@ int main(void)
 
 
 			// Ignition
-			if (HAL_GPIO_ReadPin(QuickShifter_GPIO_Port, QuickShifter_Pin) == GPIO_PIN_SET && HAL_GPIO_ReadPin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET)) {
+			if (HAL_GPIO_ReadPin(QuickShifter_GPIO_Port, QuickShifter_Pin) == GPIO_PIN_SET && HAL_GPIO_ReadPin(Ignition_GPIO_Port, Ignition_Pin) == GPIO_PIN_RESET) {
 
 				if (HAL_GPIO_ReadPin(CamPosition_GPIO_Port, CamPosition_Pin) == GPIO_PIN_RESET) {
 
@@ -425,7 +425,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 100-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 300000 - 1;
+  htim2.Init.Period = 4294967295;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -551,7 +551,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : Trigger_Pin */
   GPIO_InitStruct.Pin = Trigger_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(Trigger_GPIO_Port, &GPIO_InitStruct);
 

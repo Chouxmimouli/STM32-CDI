@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -25,6 +26,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include "usbd_cdc_if.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -64,9 +66,9 @@ static void MX_TIM2_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-#define rev_limit 9000 // Rpm value
-#define ignition_cut_time 60000 // μs
-#define trigger_coil_angle 16
+#define RevLimit 9000 // Rpm value
+#define IgnitionCutTime 60000 // μs
+#define TriggerCoilAngle 16
 #define RPM_0    16 // This curve is linear from 1000 RPM to 4000.
 #define RPM_250  16
 #define RPM_500  16
@@ -86,7 +88,7 @@ static void MX_TIM2_Init(void);
 #define RPM_4000 16 // After this point, the curve becomes flat
 
 // Global variables
-uint8_t colors[11][3] = {
+uint8_t Colors[11][3] = {
 	 {255, 0, 0},   // LED 0
 	 {255, 0, 0},   // LED 1
 	 {223, 145, 0}, // LED 2
@@ -99,10 +101,10 @@ uint8_t colors[11][3] = {
 	 {0, 255, 0},   // LED 9
 	 {0, 255, 0}    // LED 10
 };
-uint8_t map_index, angle_difference, LED_Update = 0;
-uint16_t rpm = 0;
-uint32_t delay_time, pulse_interval;
-bool datasentflag = false, fresh_cycle = true;
+uint8_t MapIndex, AngleDifference,  TriggerNum = 99;
+uint16_t Rpm = 0;
+uint32_t DelayTime, PulseInterval;
+bool datasentflag = false, FirstCycle = true;
 uint8_t ignition_map[17] = {
   	 RPM_0,
   	 RPM_250,
@@ -122,6 +124,12 @@ uint8_t ignition_map[17] = {
   	 RPM_3750,
   	 RPM_4000
 };
+
+uint8_t Buf[10];
+
+/* Led array code ------------------------------------------------------------*/
+
+
 
 // Storing the LED data
 #define MAX_LED 11
@@ -194,7 +202,7 @@ void LedSend (const float brightness) {
 void LedUpdate() {
 	#define MAX_RPM 5000 // (9000-4000)
 
-	uint16_t num_on = round(((rpm - 4000.0) * MAX_LED) / MAX_RPM); // RPM-4000 because MAX_RPM=9000-3000
+	uint16_t num_on = round(((Rpm - 4000.0) * MAX_LED) / MAX_RPM); // RPM-4000 because MAX_RPM=9000-3000
 
 	if (num_on < 0 || num_on > 11) {
 		num_on = 0;
@@ -203,7 +211,7 @@ void LedUpdate() {
 	for (int i = 0; i < 11; i++) {
 		// If the LED index is less than the input, turn it on with the predefined color
 		if (i < num_on) {
-			LedSetColor(i, colors[i][0], colors[i][1], colors[i][2]);
+			LedSetColor(i, Colors[i][0], Colors[i][1], Colors[i][2]);
 		}
 		// Otherwise, turn it off by setting the color to 0
 		else {
@@ -218,10 +226,57 @@ void LedUpdateTwoStep() {
 	}
 }
 
-
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim) {
 	HAL_TIM_PWM_Stop_DMA(&htim4, TIM_CHANNEL_2);
 	datasentflag = true;
+}
+
+
+
+/* Ignition code -------------------------------------------------------------*/
+
+
+
+void CalculateDelayTime() {
+	MapIndex = round(Rpm / 250.0f);
+
+	if (MapIndex > 16) {
+		MapIndex = 16;
+	}
+
+	AngleDifference = TriggerCoilAngle - ignition_map[MapIndex];
+	DelayTime = (PulseInterval / 360.0f) * AngleDifference;
+}
+
+void CalculateDwell() {
+	switch (TriggerNum) {
+		case 7:
+			if (Rpm > 6000) {
+				HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET); // Dwell
+			}
+			break;
+		case 8:
+			HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET); // Dwell
+			break;
+	}
+}
+
+bool IsQuickShifterOn(){
+	// returns true only if QuickShifter is on and Ignition pin is off, otherwise it returns false
+	if (HAL_GPIO_ReadPin(QuickShifter_GPIO_Port, QuickShifter_Pin) == GPIO_PIN_SET || HAL_GPIO_ReadPin(Ignition_GPIO_Port, Ignition_Pin) == GPIO_PIN_RESET) {
+		return false;
+	}
+
+	return true;
+}
+
+bool DoesRpmExeedRevLimit(){
+	// returns true only if Rpm is above the Rev Limit and Ignition pin is off, otherwise it returns false
+	if (Rpm < RevLimit || HAL_GPIO_ReadPin(Ignition_GPIO_Port, Ignition_Pin) == GPIO_PIN_RESET) {
+		return false;
+	}
+
+	return true;
 }
 
 /* USER CODE END 0 */
@@ -258,6 +313,7 @@ int main(void)
   MX_DMA_Init();
   MX_TIM4_Init();
   MX_TIM2_Init();
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 
   HAL_GPIO_WritePin(Led_GPIO_Port, Led_Pin, GPIO_PIN_SET);
@@ -265,12 +321,11 @@ int main(void)
 
   LedInit();
 
-
   // LEDs startup animation
   HAL_Delay(100);
   for (int i = 0; i < 11; i++)
   {   // Loop through the LEDs from 0 to 10
-	  LedSetColor(i, colors[i][0], colors[i][1], colors[i][2]);
+	  LedSetColor(i, Colors[i][0], Colors[i][1], Colors[i][2]);
 	  LedSend(0.3);
  	  HAL_Delay(100);
   }
@@ -295,59 +350,55 @@ int main(void)
   while (1)
   {
 	 if (HAL_GPIO_ReadPin(Trigger_GPIO_Port, Trigger_Pin) == GPIO_PIN_SET) {
-		pulse_interval = __HAL_TIM_GET_COUNTER(&htim2);
 
-		TIM2->CNT = 0;
+		if (FirstCycle == false) {
+			// Calculate Rpm
+			Rpm = 15000000 / PulseInterval;
 
-		if (fresh_cycle == false) {
+			if (IsQuickShifterOn() == false) {
 
-			// Rpm calculations
-			rpm = 60000000 / pulse_interval;
-			map_index = round(rpm / 250.0f);
+				if (DoesRpmExeedRevLimit() == false) {
 
-			if (map_index > 16) {
-				  map_index = 16;
-			}
+					CalculateDwell();
 
-			angle_difference = trigger_coil_angle - ignition_map[map_index];
-			delay_time = (pulse_interval / 360.0f) * angle_difference;
+					if (HAL_GPIO_ReadPin(CamPosition_GPIO_Port, CamPosition_Pin) == GPIO_PIN_RESET) {
 
+						CalculateDelayTime();
 
-			// Ignition
-			if (HAL_GPIO_ReadPin(QuickShifter_GPIO_Port, QuickShifter_Pin) == GPIO_PIN_SET && HAL_GPIO_ReadPin(Ignition_GPIO_Port, Ignition_Pin) == GPIO_PIN_RESET) {
+						// Ignition
+						while (__HAL_TIM_GET_COUNTER(&htim2) < DelayTime);
+						HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
 
-				if (HAL_GPIO_ReadPin(CamPosition_GPIO_Port, CamPosition_Pin) == GPIO_PIN_RESET) {
+						//sprintf((char *)Buf, "%u \r\n", Rpm);
+						//CDC_Transmit_FS(Buf, strlen((char *)Buf));
 
-					while (__HAL_TIM_GET_COUNTER(&htim2) < delay_time);
-					HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
-
-					if (rpm > rev_limit) {
-						while (__HAL_TIM_GET_COUNTER(&htim2) < ignition_cut_time);
-						fresh_cycle = true;
+						/*
+						LedUpdate();
+						LedUpdateTwoStep();
+						LedSend(0.3);
+						*/
 					}
 				} else {
-					HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_RESET);
-					/*
-					LedUpdate();
-					LedUpdateTwoStep();
-					LedSend(0.3);
-					*/
+					while (__HAL_TIM_GET_COUNTER(&htim2) < DelayTime + IgnitionCutTime);
 				}
+
 			} else {
-				fresh_cycle = true;
 				while (HAL_GPIO_ReadPin(QuickShifter_GPIO_Port, QuickShifter_Pin) == GPIO_PIN_RESET);
 			}
 
-		// Safety delay
-		while (__HAL_TIM_GET_COUNTER(&htim2) < 2000);
+			// Safety delay
+			while (__HAL_TIM_GET_COUNTER(&htim2) < 1000);
 
 		} else {
-			fresh_cycle = false;
-			/*
-			LedSetColor(10, 0, 0, 0);
-			LedSend(0.3);
-			*/
-			while (__HAL_TIM_GET_COUNTER(&htim2) < 3000);
+			//sprintf((char *)Buf, "%u \r\n", TriggerNum);
+			//CDC_Transmit_FS(Buf, strlen((char *)Buf));
+
+			if (HAL_GPIO_ReadPin(CamPosition_GPIO_Port, CamPosition_Pin) == GPIO_PIN_RESET) {
+				TriggerNum = 1;
+				FirstCycle = false;
+			}
+
+			while (__HAL_TIM_GET_COUNTER(&htim2) < 1000);
 		}
 	 }
   }
@@ -375,15 +426,14 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 8;
-  RCC_OscInitStruct.PLL.PLLN = 100;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = 4;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 23;
+  RCC_OscInitStruct.PLL.PLLN = 354;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+  RCC_OscInitStruct.PLL.PLLQ = 8;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -423,11 +473,11 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 100-1;
+  htim2.Init.Prescaler = 96-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4294967295;
+  htim2.Init.Period = 80000;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
   {
     Error_Handler();
@@ -527,6 +577,7 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
@@ -568,30 +619,42 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(QuickShifter_GPIO_Port, &GPIO_InitStruct);
 
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-  if (htim->Instance == TIM2)
-  {
-	  if (HAL_GPIO_ReadPin(QuickShifter_GPIO_Port, QuickShifter_Pin) == GPIO_PIN_RESET) {
-		  TIM2->CNT = 0;
-	  } else {
-		  fresh_cycle = true;
-		  LED_Update = 0;
 
-		  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
-		  //LedSetColor(10, 213, 3, 255);
-		  //LedSend(0.3);
-
-		  //TIM2->CNT = 0;
-	  }
+// Timer2 (Igntion pin) timout interrupt
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+  if (htim->Instance == TIM2) {
+	  HAL_GPIO_WritePin(Ignition_GPIO_Port, Ignition_Pin, GPIO_PIN_SET);
+	  FirstCycle = 1;
+	  TriggerNum = 99;
   }
 }
 
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+  // Prevent unused argument(s) compilation warning
+  UNUSED(GPIO_Pin);
+
+  if (HAL_GPIO_ReadPin(Trigger_GPIO_Port, Trigger_Pin) == GPIO_PIN_SET && __HAL_TIM_GET_COUNTER(&htim2) > 1000) {
+	  PulseInterval = __HAL_TIM_GET_COUNTER(&htim2);
+	  TIM2->CNT = 0;
+
+	  if (TriggerNum != 99) {
+		  if (TriggerNum == 8){
+			  TriggerNum = 1;
+		  } else {
+			  TriggerNum++;
+		  }
+	  }
+  }
+}
 
 /* USER CODE END 4 */
 
